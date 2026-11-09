@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { decode } from '../utils/encoding'
+import { encode, decode } from '../utils/encoding'
+import { getSurveyByCode, saveSurveyByCode } from '../utils/storage'
 import { useToast } from '../hooks/useToast'
 
 export default function Home() {
@@ -54,30 +55,41 @@ export default function Home() {
     if (!validate()) return
 
     const input = surveyCode.trim()
-    let hash = input
-    if (input.includes('/s#')) {
-      hash = input.split('/s#')[1]
-    } else if (input.includes('#')) {
-      hash = input.split('#').pop()
-    }
-
-    const data = decode(hash)
-    if (!data || !data.title || !data.questions) {
-      toast.error('Invalid survey code or link. Please verify and retry.')
-      return
-    }
-
     const userInfo = {
       name: name.trim(),
       age: parseInt(age, 10),
       phone: phone.replace(/\D/g, '')
     }
-
-    // Persist user info
     localStorage.setItem('pulse_user_info', JSON.stringify(userInfo))
 
-    // Navigate to survey with info pre-loaded
-    navigate(`/s#${hash}`, { state: { info: userInfo } })
+    // 1. Check if input is a 6-digit code or cached code
+    let surveyData = getSurveyByCode(input)
+
+    // 2. If not found by code, try decoding as full link or hash
+    if (!surveyData) {
+      let hash = input
+      if (input.includes('/s#')) {
+        hash = input.split('/s#')[1]
+      } else if (input.includes('#')) {
+        hash = input.split('#').pop()
+      }
+      const decoded = decode(hash)
+      if (decoded && decoded.questions) {
+        surveyData = decoded
+        if (surveyData.code) {
+          saveSurveyByCode(surveyData.code, surveyData)
+        }
+      }
+    }
+
+    if (surveyData && surveyData.questions) {
+      const encoded = encode(surveyData)
+      navigate(`/s#data=${encoded}&code=${surveyData.code || input}`, {
+        state: { info: userInfo, surveyData }
+      })
+    } else {
+      toast.error(`Survey "${input}" not found. Enter a valid 6-digit code or paste the survey link.`)
+    }
   }
 
   return (
@@ -115,7 +127,7 @@ export default function Home() {
                 Join a Survey
               </h2>
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                Fill in your details and enter the survey code to begin.
+                Fill in your details and enter the 6-digit survey code to begin.
               </p>
             </div>
 
@@ -172,14 +184,23 @@ export default function Home() {
 
             {/* Survey Code or Link */}
             <div>
-              <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider mb-1.5">
-                Survey Code or Link <span className="text-red-400">*</span>
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                  6-Digit Code or Link <span className="text-red-400">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setSurveyCode('101010')}
+                  className="text-[11px] text-accent-600 dark:text-accent-400 hover:underline"
+                >
+                  Try demo code 101010
+                </button>
+              </div>
               <input
                 type="text"
                 value={surveyCode}
                 onChange={(e) => setSurveyCode(e.target.value)}
-                placeholder="Paste survey link or code here…"
+                placeholder="Enter 6-digit code (e.g. 101010) or paste link…"
                 className={`input-field text-sm font-mono ${errors.surveyCode ? 'border-red-300 dark:border-red-600 focus:ring-red-400' : ''}`}
               />
               {errors.surveyCode && <p className="text-xs text-red-500 mt-1">{errors.surveyCode}</p>}
@@ -190,7 +211,7 @@ export default function Home() {
               type="submit"
               className="btn-primary w-full text-center flex items-center justify-center gap-2 pt-3 pb-3 mt-4"
             >
-              <span>Start Survey</span>
+              <span>Show Questions</span>
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
               </svg>

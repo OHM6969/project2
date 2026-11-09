@@ -24,8 +24,17 @@ export function encode(obj) {
 export function decode(str) {
   try {
     if (!str) return null
+    // Clean string from any leading/trailing prefixes
+    let clean = str.trim()
+    if (clean.includes('/s#')) clean = clean.split('/s#')[1]
+    if (clean.includes('#')) clean = clean.split('#').pop()
+    if (clean.includes('data=')) {
+      const match = clean.match(/data=([^&]+)/)
+      if (match) clean = match[1]
+    }
+
     // Restore base64 chars
-    let b64 = str.replace(/-/g, '+').replace(/_/g, '/')
+    let b64 = clean.replace(/-/g, '+').replace(/_/g, '/')
     // Add padding
     while (b64.length % 4 !== 0) b64 += '='
     const binary = atob(b64)
@@ -36,12 +45,16 @@ export function decode(str) {
     const json = inflate(bytes, { to: 'string' })
     return JSON.parse(json)
   } catch (e) {
-    console.error('Decoding error:', e)
     return null
   }
 }
 
-// Generate a simple unique ID
+// Generate a random 6-digit numeric survey code (e.g. 849201)
+export function generate6DigitCode() {
+  return Math.floor(100000 + Math.random() * 900000).toString()
+}
+
+// Generate a simple unique alphanumeric ID
 export function generateId(length = 8) {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
   let result = ''
@@ -71,11 +84,14 @@ export function decodeResponse(code) {
   return decode(code)
 }
 
-// Build the survey URL from survey data
-export function buildSurveyUrl(surveyData) {
-  const encoded = encode(surveyData)
+// Build the survey URL from survey data and code
+export function buildSurveyUrl(surveyData, code) {
+  const surveyCode = code || surveyData.code || generate6DigitCode()
+  const payload = { ...surveyData, code: surveyCode }
+  const encoded = encode(payload)
   const base = window.location.origin
-  return `${base}/s#${encoded}`
+  // Clean URL compatible with Vercel rewrites: /s#data=...&code=...
+  return `${base}/s#data=${encoded}&code=${surveyCode}`
 }
 
 // Build the admin URL from admin key
@@ -84,9 +100,47 @@ export function buildAdminUrl(adminKey) {
   return `${base}/admin#${adminKey}`
 }
 
-// Extract encoded data from hash
+// Extract encoded data or 6-digit code from URL
 export function getHashData() {
   const hash = window.location.hash.slice(1)
-  if (!hash) return null
-  return decode(hash)
+  const search = window.location.search
+
+  // 1. Check hash
+  if (hash) {
+    // If hash contains data=
+    if (hash.includes('data=')) {
+      const match = hash.match(/data=([^&]+)/)
+      if (match) {
+        const decoded = decode(match[1])
+        if (decoded && decoded.questions) return decoded
+      }
+    }
+
+    // Try decoding hash directly
+    const decoded = decode(hash)
+    if (decoded && decoded.questions) return decoded
+
+    // Check if hash is a 6-digit code
+    const cleanHash = hash.replace(/^code=/, '').trim()
+    if (/^\d{6}$/.test(cleanHash)) {
+      return { _lookupCode: cleanHash }
+    }
+  }
+
+  // 2. Check search parameters
+  if (search) {
+    const params = new URLSearchParams(search)
+    if (params.get('data')) {
+      const decoded = decode(params.get('data'))
+      if (decoded && decoded.questions) return decoded
+    }
+    if (params.get('code')) {
+      const code = params.get('code').trim()
+      if (/^\d{6}$/.test(code)) {
+        return { _lookupCode: code }
+      }
+    }
+  }
+
+  return null
 }

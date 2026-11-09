@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useTheme } from '../hooks/useTheme'
 import { motion, AnimatePresence } from 'framer-motion'
-import { decode } from '../utils/encoding'
+import { encode, decode } from '../utils/encoding'
+import { getSurveyByCode, saveSurveyByCode } from '../utils/storage'
 import { useToast } from '../hooks/useToast'
 
 function SunIcon() {
@@ -36,20 +37,35 @@ export default function Layout({ children }) {
     const input = modalCode.trim()
     if (!input) return
 
-    let hash = input
-    if (input.includes('/s#')) {
-      hash = input.split('/s#')[1]
-    } else if (input.includes('#')) {
-      hash = input.split('#').pop()
+    // 1. Check if 6-digit code or cached code
+    let surveyData = getSurveyByCode(input)
+
+    // 2. Try decoding as full link or hash
+    if (!surveyData) {
+      let hash = input
+      if (input.includes('/s#')) {
+        hash = input.split('/s#')[1]
+      } else if (input.includes('#')) {
+        hash = input.split('#').pop()
+      }
+      const decoded = decode(hash)
+      if (decoded && decoded.questions) {
+        surveyData = decoded
+        if (surveyData.code) {
+          saveSurveyByCode(surveyData.code, surveyData)
+        }
+      }
     }
 
-    const data = decode(hash)
-    if (data && data.title && data.questions) {
+    if (surveyData && surveyData.questions) {
       setShowCodeModal(false)
       setModalCode('')
-      navigate(`/s#${hash}`)
+      const encoded = encode(surveyData)
+      navigate(`/s#data=${encoded}&code=${surveyData.code || input}`, {
+        state: { surveyData }
+      })
     } else {
-      toast.error('Invalid survey link or code')
+      toast.error(`Survey "${input}" not found. Try demo code 101010 or paste full link.`)
     }
   }
 

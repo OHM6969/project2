@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getHashData, encodeResponse } from '../utils/encoding'
-import { hasSubmitted, markSubmitted, hashString } from '../utils/storage'
+import { hasSubmitted, markSubmitted, hashString, getSurveyByCode, saveSurveyByCode } from '../utils/storage'
 import OptionCard from '../components/OptionCard'
 import ProgressBar from '../components/ProgressBar'
 import { useToast } from '../hooks/useToast'
@@ -128,17 +128,36 @@ export default function Survey() {
   }, [survey])
 
   useEffect(() => {
-    const data = getHashData()
+    let data = location.state?.surveyData || null
+
+    if (!data) {
+      const hashResult = getHashData()
+      if (hashResult) {
+        if (hashResult._lookupCode) {
+          data = getSurveyByCode(hashResult._lookupCode)
+        } else if (hashResult.questions) {
+          data = hashResult
+        }
+      }
+    }
+
     if (!data || !data.title || !data.questions) {
       setError(true)
       return
     }
+
+    // Auto-cache under its 6-digit code for instant future code lookups
+    if (data.code) {
+      saveSurveyByCode(data.code, data)
+    }
+
+    setError(false)
     setSurvey(data)
     const hash = hashString(JSON.stringify(data))
     if (hasSubmitted(hash)) {
       setAlreadySubmitted(true)
     }
-  }, [location.hash])
+  }, [location.hash, location.state, location.search])
 
   const selectOption = (questionId, option) => {
     const q = survey.questions.find(q => q.id === questionId)

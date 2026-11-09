@@ -68,16 +68,32 @@ export default function MySurveys() {
                 className="card p-5 flex items-center justify-between gap-4"
               >
                 <div className="min-w-0 flex-1">
-                  <h3 className="font-semibold truncate">{survey.title}</h3>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-semibold truncate">{survey.title}</h3>
+                    {survey.code && (
+                      <span className="inline-block px-2 py-0.5 rounded-md font-mono text-xs font-semibold bg-accent-100 dark:bg-accent-900/40 text-accent-700 dark:text-accent-300">
+                        Code: {survey.code}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                     {adminData?.questions?.length || 0} questions ·{' '}
                     {new Date(survey.createdAt).toLocaleDateString()}
                   </p>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  {survey.code && (
+                    <button
+                      onClick={() => navigate(`/s#code=${survey.code}`)}
+                      className="btn-ghost text-xs sm:text-sm"
+                      title="Open student survey"
+                    >
+                      View
+                    </button>
+                  )}
                   <button
                     onClick={() => navigate(`/admin#${survey.adminKey}`)}
-                    className="btn-ghost text-sm"
+                    className="btn-ghost text-xs sm:text-sm"
                   >
                     Admin
                   </button>

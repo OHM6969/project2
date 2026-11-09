@@ -1,8 +1,8 @@
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { encode, generateId, buildSurveyUrl, buildAdminUrl } from '../utils/encoding'
-import { saveSurvey } from '../utils/storage'
+import { encode, generateId, generate6DigitCode, buildSurveyUrl, buildAdminUrl } from '../utils/encoding'
+import { saveSurvey, saveSurveyByCode } from '../utils/storage'
 import { useToast } from '../hooks/useToast'
 
 function QuestionEditor({ question, index, onChange, onDelete, onDuplicate, totalQuestions, onMoveUp, onMoveDown }) {
@@ -313,8 +313,12 @@ export default function Create() {
     if (!validate()) return
     setPublishing(true)
 
+    // Generate 6-digit survey code
+    const code = generate6DigitCode()
+
     // Clean up the data
     const surveyData = {
+      code,
       title: title.trim(),
       description: description.trim(),
       questions: questions
@@ -327,7 +331,7 @@ export default function Create() {
         }))
     }
 
-    const surveyUrl = buildSurveyUrl(surveyData)
+    const surveyUrl = buildSurveyUrl(surveyData, code)
     const adminKey = encode({
       ...surveyData,
       _created: Date.now(),
@@ -337,12 +341,15 @@ export default function Create() {
 
     // Save to localStorage
     const surveyRecord = {
-      id: generateId(),
+      id: code,
+      code,
       title: surveyData.title,
       adminKey,
+      surveyData,
       createdAt: Date.now()
     }
     saveSurvey(surveyRecord)
+    saveSurveyByCode(code, surveyData)
 
     // Navigate to published page
     setTimeout(() => {
@@ -351,11 +358,12 @@ export default function Create() {
           surveyUrl,
           adminUrl,
           adminKey,
+          code,
           title: surveyData.title,
           questionCount: surveyData.questions.length
         }
       })
-    }, 500)
+    }, 400)
   }
 
   return (
